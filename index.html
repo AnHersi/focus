@@ -175,6 +175,10 @@ input[type="range"] { accent-color: var(--accent); width: 160px; }
 .sessions > li { display: grid; grid-template-columns: 4.5em 1fr auto; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
 .sessions .at { color: var(--dim); font-variant-numeric: tabular-nums; }
 .sessions .meta { color: var(--dim); font-size: .8125rem; }
+.rename { width: 100%; padding: 0 0 1px; background: none; border: 0; border-bottom: 1px solid transparent; }
+.rename:hover { border-color: var(--line); }
+.rename:focus { outline: none; border-color: var(--accent); }
+.rename::placeholder { color: var(--dim); }
 .sessions .notes { margin: 6px 0 0; padding-left: 1.1em; color: var(--dim); font-size: .8125rem; }
 .del { color: var(--dim); font-size: .8125rem; padding: 2px 8px; align-self: start; opacity: 0; }
 .del:hover { color: var(--ink); }
@@ -673,8 +677,12 @@ function render() {
   $('#idleCtl').hidden = view !== 'idle';
   $('#runCtl').hidden = view !== 'run';
   $('#review').hidden = view !== 'review';
-  $('#task').hidden = view !== 'idle';
-  $('#taskLabel').hidden = view === 'idle';
+  // the task name stays editable during and after a work session; breaks just show a label
+  const naming = view === 'idle' || (run ? run.mode === 'work' : last?.mode === 'work');
+  $('#task').hidden = !naming;
+  $('#taskLabel').hidden = naming;
+  $('#task').placeholder = view === 'idle' ? 'What are you working on?' : 'Name this session';
+  if (view !== 'idle' && naming && document.activeElement !== $('#task')) $('#task').value = (run ? run.task : last.task) || '';
   $('#hint').hidden = !(view === 'run' && run.planned != null && ctx?.state !== 'running');
   $('#warn').hidden = !(view === 'idle' && 'Notification' in window && Notification.permission === 'denied');
   if (view === 'idle') dial.setAttribute('role', 'slider'); else dial.removeAttribute('role');
@@ -755,7 +763,7 @@ function buildHistory() {
     <h3>${sel === today ? 'Today' : new Date(sel).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}</h3>
     ${list.length ? `<ul class="sessions">${list.map(s => `<li>
       <span class="at">${clock(s.start)}</span>
-      <div><div>${esc(s.task) || 'Focus session'}</div><div class="meta">${meta(s)}</div>
+      <div><input class="rename" data-ren="${s.start}" value="${esc(s.task)}" placeholder="Add a name" aria-label="Session name" maxlength="120"><div class="meta">${meta(s)}</div>
       ${s.notes?.length ? `<ul class="notes">${s.notes.map(n => `<li>${esc(n.text)}</li>`).join('')}</ul>` : ''}</div>
       <button class="del" data-del="${s.start}" aria-label="Delete session at ${clock(s.start)}">Delete</button></li>`).join('')}</ul>`
       : `<p class="note" style="text-align:left">${sel === today ? 'No sessions yet today. Close this and press Space to start one.' : 'No sessions on this day.'}</p>`}`;
@@ -769,6 +777,20 @@ $('#hist').onclick = e => {
     if (last?.s === s) toIdle();
     buildHistory();
   }
+};
+$('#hist').onchange = e => {
+  const i = e.target.closest('[data-ren]'), s = i && log.find(x => x.start === +i.dataset.ren);
+  if (!s) return;
+  s.task = i.value.trim(); save('log', log);
+  if (last?.s === s) last.task = s.task;
+  render();
+};
+$('#hist').onkeydown = e => { if (e.key === 'Enter' && e.target.matches('[data-ren]')) e.target.blur(); };
+// rename the current session while it runs or right after it ends
+$('#task').oninput = e => {
+  const t = e.target.value.trim();
+  if (view === 'run' && run.mode === 'work') { run.task = t; save('run', run); }
+  else if ((view === 'review' || view === 'ring') && last?.s) { last.task = last.s.task = t; save('log', log); }
 };
 function openHistory() { histDay = null; buildHistory(); $('#importMsg').textContent = ''; openDlg('#histDlg'); }
 $('#exportBtn').onclick = () => {
@@ -861,7 +883,7 @@ addEventListener('keydown', e => {
   if (view === 'run') unlock();
   if (e.ctrlKey || e.metaKey || e.altKey || $('dialog[open]')) return;
   if (e.target.matches('input, textarea, select')) {
-    if (e.target.id === 'task' && e.key === 'Enter') start('work');
+    if (e.target.id === 'task' && e.key === 'Enter') view === 'idle' ? start('work') : e.target.blur();
     if (e.key === 'Escape') e.target.blur();
     return;
   }
