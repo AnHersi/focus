@@ -128,6 +128,16 @@ body[data-view="idle"] #time:hover { color: var(--accent); }
 .rate button:hover { border-color: var(--dim); }
 .rate button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 .scale { color: var(--dim); font-size: .75rem; padding: 0 4px; }
+.sq { width: 38px; height: 38px; padding: 0; }
+.stepper { display: flex; gap: 6px; align-items: center; }
+
+/* ---------- idle status: long-break cycle and daily goal ---------- */
+.status { display: flex; flex-wrap: wrap; gap: 8px 22px; justify-content: center; align-items: center; margin-top: 18px; min-height: 1.3em; color: var(--dim); font-size: .8125rem; }
+.dots { display: inline-flex; gap: 5px; vertical-align: middle; margin-right: 8px; }
+.dots i { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--dim); }
+.dots i.on { background: var(--accent); border-color: var(--accent); }
+.goalbar { display: inline-block; width: 64px; height: 3px; margin-left: 8px; vertical-align: middle; background: var(--line); border-radius: 2px; overflow: hidden; }
+.goalbar span { display: block; height: 100%; background: var(--accent); }
 
 /* ---------- dialogs ---------- */
 dialog {
@@ -160,6 +170,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; }
 .week .fill { width: 55%; max-width: 26px; height: calc(var(--h) * 64%); min-height: 2px; border-radius: 3px; background: var(--accent); opacity: .4; }
 .week [aria-pressed="true"] .fill { opacity: 1; }
 .week .v { font-variant-numeric: tabular-nums; min-height: 1.2em; }
+.week .met .v { color: var(--accent); }
 .sessions { list-style: none; margin: 8px 0 0; padding: 0; }
 .sessions > li { display: grid; grid-template-columns: 4.5em 1fr auto; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
 .sessions .at { color: var(--dim); font-variant-numeric: tabular-nums; }
@@ -173,8 +184,14 @@ input[type="range"] { accent-color: var(--accent); width: 160px; }
 .dlg-foot .note { text-align: left; flex-basis: 100%; }
 
 .setting { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; align-items: center; padding: 14px 0; border-top: 1px solid var(--line); }
-.setting:first-child { border-top: 0; }
+.setting:first-child, h3 + .setting { border-top: 0; }
 .setting .help { grid-column: 1 / -1; text-align: left; }
+#setDlg h3 { margin: 22px 0 0; color: var(--dim); }
+#setDlg h3:first-child { margin-top: 6px; }
+.num { width: 4.5em; padding: 6px 8px; text-align: right; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+.unit { color: var(--dim); margin-left: 6px; }
+.check { display: flex; gap: 8px; align-items: center; }
+.check input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
 .state { color: var(--dim); }
 .state.good { color: var(--sage); }
 
@@ -233,22 +250,30 @@ kbd {
     <div class="row">
       <button class="primary" id="startBtn" title="Space">Start</button>
       <button class="ghost" id="flowBtn" title="F">Count up</button>
+      <button class="ghost" id="idleBreak" title="B">Break</button>
     </div>
+    <div class="status" id="status"></div>
   </div>
   <div id="runCtl" class="row chrome">
+    <button class="ghost sq" id="lessBtn" aria-label="Less time" title="↓">−</button>
+    <button class="ghost sq" id="moreBtn" aria-label="More time" title="↑">+</button>
     <button class="ghost" id="pauseBtn" title="Space">Pause</button>
     <button class="ghost" id="notesBtn" title="N">Park a thought</button>
     <button class="ghost" id="skipAhead" title="→"></button>
     <button class="ghost" id="stopBtn" title="Esc">Stop</button>
   </div>
   <div id="review">
-    <p id="away" class="note"></p>
+    <p id="revNote" class="note"></p>
     <p>How focused were you?</p>
     <div class="rate"><span class="scale" aria-hidden="true">scattered</span>
       <button data-r="1">1</button><button data-r="2">2</button><button data-r="3">3</button><button data-r="4">4</button><button data-r="5">5</button><span class="scale" aria-hidden="true">deep</span>
     </div>
     <div class="row" style="margin-top:6px">
-      <button class="primary" id="breakBtn" title="B"></button>
+      <div class="stepper">
+        <button class="ghost sq" id="brkLess" aria-label="Shorter break" title="↓">−</button>
+        <button class="primary" id="breakBtn" title="B"></button>
+        <button class="ghost sq" id="brkMore" aria-label="Longer break" title="↑">+</button>
+      </div>
       <button class="ghost" id="skipBtn" title="S">Skip break</button>
     </div>
   </div>
@@ -285,6 +310,31 @@ kbd {
 <dialog id="setDlg" closedby="any" tabindex="-1" aria-labelledby="setTitle">
   <div class="dlg-head"><h2 id="setTitle">Settings</h2><button class="icon" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
   <div class="dlg-body">
+    <h3>Breaks</h3>
+    <div class="setting">
+      <label for="short">Short break</label>
+      <span><input class="num" type="number" id="short" data-set="short" min="1" max="60"><span class="unit">min</span></span>
+      <label class="check help"><input type="checkbox" data-set="scale"> Scale with the session instead: 1 minute of break per 5 of work</label>
+    </div>
+    <div class="setting">
+      <label for="long">Long break</label>
+      <span><input class="num" type="number" id="long" data-set="long" min="1" max="120"><span class="unit">min</span></span>
+    </div>
+    <div class="setting">
+      <label for="every">Long break after</label>
+      <span><input class="num" type="number" id="every" data-set="every" min="0" max="12"><span class="unit">sessions</span></span>
+      <p class="note help">Counts today's sessions since your last long break. Set to 0 to only take short breaks.</p>
+    </div>
+    <h3>Focus</h3>
+    <div class="setting">
+      <label for="goal">Daily goal</label>
+      <span><input class="num" type="number" id="goal" data-set="goal" min="0" max="16" step="0.5"><span class="unit">hours</span></span>
+      <p class="note help">Set to 0 to turn the goal off.</p>
+    </div>
+    <div class="setting">
+      <label class="check"><input type="checkbox" data-set="awake"> Keep the screen awake during sessions</label>
+    </div>
+    <h3>Alarm</h3>
     <div class="setting">
       <label for="snd">Alarm sound</label>
       <select id="snd"><option value="chime">Chime</option><option value="bell">Bell</option><option value="soft">Soft</option></select>
@@ -299,6 +349,7 @@ kbd {
       <button class="ghost help" id="notifBtn" style="justify-self:start">Allow notifications</button>
       <p class="note help" id="notifHelp">To allow them, click the icon at the left of the address bar, open the site's permissions, set Notifications to Allow, then reload this page.</p>
     </div>
+    <h3>Appearance</h3>
     <div class="setting">
       <label for="theme">Theme</label>
       <select id="theme"><option value="dark">Dark</option><option value="light">Light</option><option value="system">Match system</option></select>
@@ -317,9 +368,10 @@ kbd {
     <dl class="keys">
       <dt><kbd>Space</kbd></dt><dd>Start, pause or resume</dd>
       <dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Add or remove 5 minutes, before or during a session</dd>
-      <dt><kbd>Shift</kbd> + <kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Add or remove 1 minute</dd>
+      <dt><kbd>Shift</kbd> + <kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Add or remove 1 minute (breaks always move by 1)</dd>
       <dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></dt><dd>Set 30, 45 or 60 minutes</dd>
       <dt><kbd>F</kbd></dt><dd>Start counting up</dd>
+      <dt><kbd>B</kbd></dt><dd>Take a break now</dd>
       <dt><kbd>N</kbd></dt><dd>Park a thought</dd>
       <dt><kbd>→</kbd></dt><dd>Skip ahead: log the time so far and move to the break (or end the break)</dd>
       <dt><kbd>Esc</kbd></dt><dd>Stop: log the time so far and go back to the start screen</dd>
@@ -328,7 +380,8 @@ kbd {
     <h3>After a session</h3>
     <dl class="keys" style="margin-bottom:0">
       <dt><kbd>1</kbd> – <kbd>5</kbd></dt><dd>Rate your focus</dd>
-      <dt><kbd>B</kbd></dt><dd>Take the suggested break</dd>
+      <dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Make the break longer or shorter</dd>
+      <dt><kbd>B</kbd></dt><dd>Take the break</dd>
       <dt><kbd>S</kbd></dt><dd>Skip the break</dd>
     </dl>
   </div>
@@ -342,7 +395,12 @@ const now = () => Date.now();
 const TAU = Math.PI * 2;
 const clock = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
-let set = { mins: 45, vol: .4, sound: 'chime', theme: 'dark', ...load('settings', {}) };
+let set = {
+  mins: 45, vol: .4, sound: 'chime', theme: 'dark',
+  short: 5, scale: true, long: 15, every: 4, longAt: 0,   // breaks; longAt = when the last long break started
+  goal: 0, awake: true,                                    // daily goal in hours (0 = off)
+  ...load('settings', {}),
+};
 let log = load('log', []);
 // run: { mode: 'work'|'break', task, start, pausedMs, pausedAt, planned (ms, null = count up), notes }
 // Time is always derived from timestamps, so throttled tabs, sleep and reloads can't make it drift.
@@ -418,9 +476,10 @@ function setFav(frac, done) {
 }
 
 /* ---------- session flow ---------- */
-function start(mode, flow = false, mins = set.mins) {
+function start(mode, flow = false, mins = set.mins, long = false) {
   closeEdit(true);
-  run = { mode, task: mode === 'work' ? $('#task').value.trim() : '', start: now(), pausedMs: 0, pausedAt: null, planned: flow ? null : mins * 60000, notes: [] };
+  if (long) { set.longAt = now(); save('settings', set); }   // a long break restarts the cycle
+  run = { mode, long, task: mode === 'work' ? $('#task').value.trim() : '', start: now(), pausedMs: 0, pausedAt: null, planned: flow ? null : mins * 60000, notes: [] };
   save('run', run); view = 'run'; last = null;
   if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().then(render);
   arm(); unlock(); render();
@@ -464,7 +523,8 @@ function ring() {
   document.title = '✓ ' + title; setFav(null, true);
   notify(title, mode === 'work' ? `${last.mins} minutes logged.` : 'Ready for the next session?');
 }
-const after = () => last.s ? (view = 'review', render()) : toIdle();
+const after = () => last.s ? (toReview(), render()) : toIdle();
+function toReview() { Object.assign(last, nextBreak(last.mins)); view = 'review'; }
 function ack() {
   if (view !== 'ring') return;
   disarm(); note?.close(); after();
@@ -473,7 +533,32 @@ function skip() { disarm(); end(true); after(); }   // on to the next block: wor
 function stop() { disarm(); end(true); toIdle(); }
 function toIdle() { view = 'idle'; last = null; ctx?.suspend(); render(); }
 function rate(n) { if (last?.s) { last.s.rating = n; save('log', log); render(); } }
-const breakMins = () => Math.min(20, Math.max(3, Math.round(last.mins / 5)));
+
+/* ---------- breaks and the daily goal ---------- */
+const today0 = () => new Date().setHours(0, 0, 0, 0);
+const todayMins = () => log.filter(s => s.start >= today0()).reduce((a, s) => a + s.mins, 0);
+const sinceLong = () => log.filter(s => s.start >= Math.max(set.longAt, today0())).length;
+// long break once enough sessions have piled up; otherwise a short one, fixed or scaled to the session
+function nextBreak(sessionMins) {
+  const long = set.every > 0 && sinceLong() >= set.every;
+  return { long, brk: long ? set.long : set.scale && sessionMins ? Math.max(1, Math.round(sessionMins / 5)) : set.short };
+}
+const takeBreak = () => start('break', false, last.brk, last.long);
+function idleBreak() { const b = nextBreak(0); start('break', false, b.brk, b.long); }
+function setBrk(m) { last.brk = Math.min(120, Math.max(1, m)); render(); }
+
+let wake = null;   // screen wake lock while a session runs
+async function keepAwake(on) {
+  try {
+    if (on && set.awake && !wake && 'wakeLock' in navigator && document.visibilityState === 'visible') {
+      wake = 'pending';
+      wake = await navigator.wakeLock.request('screen');
+      wake.onrelease = () => { wake = null; };
+    } else if ((!on || !set.awake) && wake?.release) { await wake.release(); wake = null; }
+  } catch { wake = null; }
+}
+// the browser drops the lock when the tab is hidden; take it back on return
+document.addEventListener('visibilitychange', () => keepAwake(view === 'run'));
 
 /* ---------- dial ---------- */
 const dial = $('#dial'), R = 84;
@@ -594,6 +679,7 @@ function render() {
   $('#warn').hidden = !(view === 'idle' && 'Notification' in window && Notification.permission === 'denied');
   if (view === 'idle') dial.setAttribute('role', 'slider'); else dial.removeAttribute('role');
   dial.tabIndex = view === 'idle' ? 0 : -1;
+  keepAwake(view === 'run');
 
   if (view === 'idle') {
     show(fmt(set.mins * 60000));
@@ -605,8 +691,18 @@ function render() {
     dial.setAttribute('aria-valuetext', `${set.mins} minutes`);
     const tasks = [...new Set(log.map(s => s.task).filter(Boolean).reverse())].slice(0, 8);
     $('#recent').innerHTML = tasks.map(t => `<option value="${esc(t)}">`).join('');
+    const done = Math.min(sinceLong(), set.every), today = todayMins();
+    $('#status').innerHTML = (set.every > 0
+      ? `<span><span class="dots">${[...Array(set.every)].map((_, i) => `<i${i < done ? ' class="on"' : ''}></i>`).join('')}</span>${
+          done >= set.every ? 'Long break due' : `${set.every - done} until a long break`}</span>` : '')
+      + (set.goal > 0
+      ? `<span>${hm(today)} of ${hm(set.goal * 60)} today<span class="goalbar"><span style="width:${Math.min(100, today / (set.goal * 60) * 100)}%"></span></span></span>` : '');
+    $('#idleBreak').textContent = nextBreak(0).long ? 'Long break' : 'Break';
   } else if (view === 'run') {
-    $('#taskLabel').textContent = run.mode === 'work' ? (run.task || 'Focus session') : 'Break';
+    $('#taskLabel').textContent = run.mode === 'work' ? (run.task || 'Focus session') : run.long ? 'Long break' : 'Break';
+    const step = run.mode === 'work' ? 5 : 1;
+    $('#lessBtn').hidden = $('#moreBtn').hidden = run.planned == null;
+    $('#lessBtn').title = `${step} min less (↓)`; $('#moreBtn').title = `${step} min more (↑)`;
     $('#pauseBtn').textContent = run.pausedAt ? 'Resume' : 'Pause';
     $('#notesBtn').hidden = $('#stopBtn').hidden = run.mode !== 'work';
     $('#skipAhead').textContent = run.mode === 'work' ? 'Skip to break' : 'Skip break';
@@ -620,10 +716,15 @@ function render() {
     $('#taskLabel').textContent = s.task || 'Focus session';
     show(String(s.mins)); drawDial(null);
     setText('#sub', last.early ? `of ${last.planned} minutes` : s.mins === 1 ? 'minute' : 'minutes');
-    $('#away').hidden = !last.away;
-    $('#away').textContent = `Finished at ${clock(s.end)} while the app was closed.`;
+    const goal = set.goal * 60, today = todayMins();
+    $('#revNote').textContent = [
+      last.away && `Finished at ${clock(s.end)} while the app was closed.`,
+      goal && today >= goal && today - s.mins < goal && `You reached today's goal of ${hm(goal)}.`,
+      last.long && `That's ${set.every} sessions, so it's time for a long break.`,
+    ].filter(Boolean).join(' ');
+    $('#revNote').hidden = !$('#revNote').textContent;
     $$('[data-r]').forEach(x => x.setAttribute('aria-pressed', +x.dataset.r === s.rating));
-    $('#breakBtn').textContent = `Take a ${breakMins()}-minute break`;
+    $('#breakBtn').textContent = `Take a ${last.brk}-minute ${last.long ? 'long ' : ''}break`;
     document.title = 'Focus'; setFav(null);
   }
 }
@@ -636,8 +737,8 @@ function buildHistory() {
   const byDay = {};
   for (const s of log) byDay[dayKey(s.start)] = (byDay[dayKey(s.start)] || 0) + s.mins;
   const days = [...Array(7)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() - 6 + i); return { d, k: d.toDateString(), m: byDay[d.toDateString()] || 0 }; });
-  const today = days[6].k, sel = histDay ?? today;
-  const max = Math.max(60, ...days.map(x => x.m));
+  const today = days[6].k, sel = histDay ?? today, goal = set.goal * 60;
+  const max = Math.max(60, goal, ...days.map(x => x.m));
   let streak = 0; const d = new Date();
   if (!byDay[d.toDateString()]) d.setDate(d.getDate() - 1);
   while (byDay[d.toDateString()]) { streak++; d.setDate(d.getDate() - 1); }
@@ -645,12 +746,12 @@ function buildHistory() {
   const meta = s => [`${s.mins} min${s.early ? ` of ${s.planned}` : ''}`, s.planned == null && 'counted up', s.rating && `focus ${s.rating} of 5`].filter(Boolean).join(', ');
   $('#hist').innerHTML = `
     <div class="stats">
-      <div><b>${hm(days[6].m)}</b><span>today</span></div>
+      <div><b>${hm(days[6].m)}</b><span>${goal ? `today, of a ${hm(goal)} goal` : 'today'}</span></div>
       <div><b>${hm(days.reduce((a, x) => a + x.m, 0))}</b><span>last 7 days</span></div>
       <div><b>${streak}</b><span>${streak === 1 ? 'day' : 'days'} in a row</span></div>
     </div>
-    <div class="week">${days.map(x => `<button data-day="${x.k}" aria-pressed="${x.k === sel}" aria-label="${x.d.toLocaleDateString([], { weekday: 'long' })}, ${hm(x.m)}">
-      <span class="v">${x.m ? hm(x.m) : ''}</span><span class="fill" style="--h:${x.m / max}"></span><span>${x.d.toLocaleDateString([], { weekday: 'short' })}</span></button>`).join('')}</div>
+    <div class="week">${days.map(x => { const met = goal && x.m >= goal; return `<button data-day="${x.k}" aria-pressed="${x.k === sel}"${met ? ' class="met"' : ''} aria-label="${x.d.toLocaleDateString([], { weekday: 'long' })}, ${hm(x.m)}${met ? ', goal met' : ''}">
+      <span class="v">${met ? '✓ ' : ''}${x.m ? hm(x.m) : ''}</span><span class="fill" style="--h:${x.m / max}"></span><span>${x.d.toLocaleDateString([], { weekday: 'short' })}</span></button>`; }).join('')}</div>
     <h3>${sel === today ? 'Today' : new Date(sel).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}</h3>
     ${list.length ? `<ul class="sessions">${list.map(s => `<li>
       <span class="at">${clock(s.start)}</span>
@@ -706,6 +807,7 @@ $('#noteTxt').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preve
 /* ---------- settings ---------- */
 function syncSettings() {
   $('#vol').value = set.vol; $('#snd').value = set.sound; $('#theme').value = set.theme;
+  $$('[data-set]').forEach(i => i.type === 'checkbox' ? i.checked = set[i.dataset.set] : i.value = set[i.dataset.set]);
   const p = 'Notification' in window ? Notification.permission : 'unsupported';
   $('#notifState').textContent = { granted: 'Allowed', denied: 'Blocked', default: 'Not set up', unsupported: 'Not available here' }[p];
   $('#notifState').classList.toggle('good', p === 'granted');
@@ -714,6 +816,12 @@ function syncSettings() {
 }
 function openSettings() { syncSettings(); openDlg('#setDlg'); }
 const saveSet = () => save('settings', set);
+$$('[data-set]').forEach(i => i.onchange = () => {
+  const k = i.dataset.set;
+  if (i.type === 'checkbox') set[k] = i.checked;
+  else i.value = set[k] = Math.min(+i.max, Math.max(+i.min, +i.value || 0));   // clamp typed values
+  saveSet(); render();
+});
 $('#vol').oninput = e => { set.vol = +e.target.value; saveSet(); };
 $('#vol').onchange = preview;
 $('#snd').onchange = e => { set.sound = e.target.value; saveSet(); preview(); };
@@ -736,7 +844,12 @@ $('#pauseBtn').onclick = togglePause;
 $('#stopBtn').onclick = stop;
 $('#skipAhead').onclick = skip;
 $('#notesBtn').onclick = openNotes;
-$('#breakBtn').onclick = () => start('break', false, breakMins());
+$('#breakBtn').onclick = takeBreak;
+$('#brkLess').onclick = () => setBrk(last.brk - 1);
+$('#brkMore').onclick = () => setBrk(last.brk + 1);
+$('#idleBreak').onclick = idleBreak;
+$('#lessBtn').onclick = () => adjust(run.mode === 'work' ? -5 : -1);
+$('#moreBtn').onclick = () => adjust(run.mode === 'work' ? 5 : 1);
 $('#skipBtn').onclick = toIdle;
 $('#histBtn').onclick = openHistory;
 $('#setBtn').onclick = $('#warnBtn').onclick = openSettings;
@@ -755,14 +868,16 @@ addEventListener('keydown', e => {
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (view === 'review') {
     if (/^[1-5]$/.test(k)) rate(+k);
-    else if (k === 'b') start('break', false, breakMins());
+    else if (k === 'b') takeBreak();
     else if (k === 's' || k === 'Escape') toIdle();
+    else if (k === 'ArrowUp' || k === 'ArrowDown') { e.preventDefault(); setBrk(last.brk + (k === 'ArrowUp' ? 1 : -1)); }
     return;
   }
   if (k === ' ') { e.preventDefault(); view === 'idle' ? start('work') : togglePause(); }
   else if (k === 'ArrowUp' || k === 'ArrowDown' || (view === 'idle' && e.target === dial && (k === 'ArrowRight' || k === 'ArrowLeft'))) {
-    e.preventDefault(); adjust((k === 'ArrowUp' || k === 'ArrowRight' ? 1 : -1) * (e.shiftKey ? 1 : 5));
+    e.preventDefault(); adjust((k === 'ArrowUp' || k === 'ArrowRight' ? 1 : -1) * (e.shiftKey || run?.mode === 'break' ? 1 : 5));
   }
+  else if (view === 'idle' && k === 'b') idleBreak();
   else if (k === 'h') openHistory();
   else if (k === '?') openDlg('#keysDlg');
   else if (view === 'idle' && /^[1-3]$/.test(k)) setMins([30, 45, 60][k - 1]);
@@ -785,7 +900,7 @@ if (run) {
   if (run.planned != null && elapsed(run) >= run.planned) {
     const mode = run.mode;
     end(false);
-    if (mode === 'work' && last.s) { view = 'review'; last.away = true; } else last = null;
+    if (mode === 'work' && last.s) { toReview(); last.away = true; } else last = null;
   } else { view = 'run'; arm(); }
 }
 render();
