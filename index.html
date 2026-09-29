@@ -1,0 +1,796 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Focus</title>
+<link rel="icon" href="icon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0F1722">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- numerals-only subset of Fraunces: a few KB -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@144,300,100&text=0123456789:hm%20&display=swap">
+<style>
+:root {
+  --bg: #0F1722; --raise: #172231; --ink: #E9E4D8; --dim: #8592A4; --line: #26344A;
+  --lamp: #F0B45A; --sage: #93C2A6; --accent: var(--lamp);
+  --face: Fraunces, Georgia, serif;
+  color-scheme: dark;
+}
+html[data-theme="light"] {
+  --bg: #E9EDF1; --raise: #F7F9FB; --ink: #16202C; --dim: #5B6879; --line: #C8D0DA;
+  --lamp: #B06A12; --sage: #2F7552;
+  color-scheme: light;
+}
+body[data-mode="break"] { --accent: var(--sage); }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; min-height: 100dvh; background: var(--bg); color: var(--ink);
+  font: 15px/1.5 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  display: grid; grid-template-rows: 1fr auto; grid-template-columns: minmax(0, 1fr);
+  padding: 16px;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- buttons ---------- */
+button {
+  background: none; border: 1px solid transparent; border-radius: 999px;
+  padding: 8px 16px; cursor: pointer;
+  transition: background-color .15s, border-color .15s, color .15s;
+}
+.primary { background: var(--accent); color: var(--bg); font-weight: 600; padding: 10px 30px; }
+.primary:hover { filter: brightness(1.07); }
+.ghost { border-color: var(--line); }
+.ghost:hover { border-color: var(--dim); }
+.chip { color: var(--dim); padding: 6px 14px; font-variant-numeric: tabular-nums; }
+.chip:hover { color: var(--ink); }
+.chip[aria-pressed="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.icon { width: 38px; height: 38px; padding: 0; display: grid; place-items: center; color: var(--dim); }
+.icon:hover { color: var(--ink); background: var(--raise); }
+.icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.link { color: var(--dim); padding: 2px 4px; border-radius: 4px; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.link:hover { color: var(--ink); }
+
+/* ---------- layout ---------- */
+header { position: fixed; top: 10px; right: 10px; display: flex; gap: 2px; z-index: 1; }
+main { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding-top: 44px; }
+/* fixed height so the dial never jumps when the controls change */
+footer { min-height: 200px; display: flex; flex-direction: column; align-items: center; gap: 18px; padding-top: 8px; }
+.row { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; }
+footer > div, footer > p { animation: appear .35s ease-out; }
+@keyframes appear { from { opacity: 0; } }
+.note { color: var(--dim); font-size: .8125rem; text-align: center; max-width: 46ch; margin: 0; }
+#hint { color: var(--accent); }
+
+/* controls fade away while the mouse rests during a session */
+.chrome { transition: opacity .8s; }
+body.still[data-view="run"] .chrome { opacity: 0; pointer-events: none; }
+body.still[data-view="run"] { cursor: none; }
+
+/* ---------- task ---------- */
+.task { width: min(520px, 100%); height: 44px; display: grid; place-items: center; }
+#task {
+  width: 100%; text-align: center; font-size: 1.25rem; background: none;
+  border: 0; border-bottom: 1px solid transparent; padding: 6px 4px; transition: border-color .2s;
+}
+#task:hover { border-color: var(--line); }
+#task:focus { outline: none; border-color: var(--accent); }
+#task::placeholder { color: var(--dim); }
+#taskLabel { margin: 0; font-size: 1.25rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- the dial ---------- */
+.dial { user-select: none; -webkit-user-select: none; position: relative; width: min(72vmin, 440px, 100%, calc(100dvh - 380px)); aspect-ratio: 1; container-type: inline-size; border-radius: 50%; }
+body[data-view="idle"] .dial { cursor: grab; touch-action: none; }
+body.dragging .dial { cursor: grabbing; }
+.dial svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+#ticks line { stroke: var(--line); stroke-width: .7; stroke-linecap: round; }
+#ticks line.major { stroke: var(--dim); stroke-width: 1; opacity: .6; }
+body:not([data-view="idle"]) #ticks { opacity: .45; }
+#track { fill: none; stroke: var(--line); stroke-width: 1; }
+#arc { fill: none; stroke: var(--accent); stroke-width: 2.4; stroke-linecap: round; }
+#knob { fill: var(--accent); r: 3.2; }
+/* the lamp is only lit while you work */
+body[data-view="run"] #arc, body[data-view="run"] #knob { filter: drop-shadow(0 0 3px var(--accent)); }
+body[data-view="idle"] #knob { r: 6.5; stroke: var(--bg); stroke-width: 3; }
+.paused #arc, .paused #knob { opacity: .35; filter: none !important; }
+body[data-view="ring"] #track { stroke: var(--accent); stroke-width: 1.6; filter: drop-shadow(0 0 4px var(--accent)); animation: bloom 2.4s ease-out; }
+body[data-view="review"] #track { stroke: var(--accent); opacity: .55; }
+@keyframes bloom {
+  0% { stroke-width: 1; filter: drop-shadow(0 0 0 var(--accent)); }
+  25% { stroke-width: 3; filter: drop-shadow(0 0 12px var(--accent)); }
+}
+
+.face { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+#time { font: 300 22cqi/1 var(--face); pointer-events: auto; transition: opacity .3s, color .2s; white-space: nowrap; }
+#time.long { font-size: 16cqi; }
+#time i { font-style: normal; display: inline-block; width: .57em; text-align: center; }
+#time i.c { width: .3em; position: relative; top: -.05em; }
+body[data-view="idle"] #time { cursor: text; }
+body[data-view="idle"] #time:hover { color: var(--accent); }
+.paused #time { opacity: .4; }
+#timeEdit {
+  pointer-events: auto; font: 300 22cqi/1 var(--face); width: 2.2em; text-align: center;
+  background: none; border: 0; border-bottom: 1px solid var(--accent); padding: 0; appearance: textfield;
+}
+#timeEdit::-webkit-inner-spin-button, #timeEdit::-webkit-outer-spin-button { appearance: none; margin: 0; }
+#timeEdit:focus { outline: none; }
+#sub { position: absolute; top: calc(50% + 14cqi); color: var(--dim); font-size: .875rem; white-space: nowrap; }
+
+/* ---------- review ---------- */
+#review { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+#review p { margin: 0; }
+.rate { display: flex; gap: 8px; align-items: center; }
+.rate button { width: 40px; height: 40px; padding: 0; border-color: var(--line); font-variant-numeric: tabular-nums; }
+.rate button:hover { border-color: var(--dim); }
+.rate button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.scale { color: var(--dim); font-size: .75rem; padding: 0 4px; }
+
+/* ---------- dialogs ---------- */
+dialog {
+  padding: 0; border: 1px solid var(--line); border-radius: 16px; background: var(--raise); color: var(--ink);
+  width: min(520px, calc(100vw - 24px)); max-height: min(760px, calc(100dvh - 24px));
+  box-shadow: 0 24px 64px -16px rgb(0 0 0 / .5);
+}
+dialog[open] { animation: pop .18s ease-out; }
+dialog:focus { outline: none; }
+@keyframes pop { from { opacity: 0; transform: translateY(8px); } }
+dialog::backdrop { background: rgb(6 10 18 / .5); }
+.dlg-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 12px 0 24px; }
+.dlg-head h2 { font-size: 1.125rem; font-weight: 600; margin: 0; }
+.dlg-body { padding: 8px 24px 24px; }
+h3 { font-size: .9375rem; font-weight: 600; margin: 0 0 4px; }
+select, textarea { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+select { padding: 6px 10px; }
+input[type="range"] { accent-color: var(--accent); width: 160px; }
+
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 10px 0 22px; }
+.stats b { display: block; font: 300 2rem/1.15 var(--face); }
+.stats span { color: var(--dim); font-size: .8125rem; }
+.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; height: 140px; margin-bottom: 20px; }
+.week button {
+  display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px;
+  height: 100%; padding: 6px 0; border-radius: 10px; color: var(--dim); font-size: .75rem;
+}
+.week button:hover { background: var(--bg); }
+.week button[aria-pressed="true"] { background: var(--bg); color: var(--ink); }
+.week .fill { width: 55%; max-width: 26px; height: calc(var(--h) * 64%); min-height: 2px; border-radius: 3px; background: var(--accent); opacity: .4; }
+.week [aria-pressed="true"] .fill { opacity: 1; }
+.week .v { font-variant-numeric: tabular-nums; min-height: 1.2em; }
+.sessions { list-style: none; margin: 8px 0 0; padding: 0; }
+.sessions > li { display: grid; grid-template-columns: 4.5em 1fr auto; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.sessions .at { color: var(--dim); font-variant-numeric: tabular-nums; }
+.sessions .meta { color: var(--dim); font-size: .8125rem; }
+.sessions .notes { margin: 6px 0 0; padding-left: 1.1em; color: var(--dim); font-size: .8125rem; }
+.del { color: var(--dim); font-size: .8125rem; padding: 2px 8px; align-self: start; opacity: 0; }
+.del:hover { color: var(--ink); }
+.sessions li:hover .del, .del:focus-visible { opacity: 1; }
+@media (hover: none) { .del { opacity: 1; } }
+.dlg-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-top: 16px; margin-top: 20px; border-top: 1px solid var(--line); }
+.dlg-foot .note { text-align: left; flex-basis: 100%; }
+
+.setting { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; align-items: center; padding: 14px 0; border-top: 1px solid var(--line); }
+.setting:first-child { border-top: 0; }
+.setting .help { grid-column: 1 / -1; text-align: left; }
+.state { color: var(--dim); }
+.state.good { color: var(--sage); }
+
+#noteTxt { width: 100%; min-height: 96px; padding: 10px 12px; resize: vertical; line-height: 1.5; }
+#noteList { margin: 12px 0 0; padding-left: 1.1em; color: var(--dim); font-size: .875rem; }
+
+.keys { display: grid; grid-template-columns: 9.5em 1fr; gap: 10px 18px; margin: 8px 0 20px; align-items: center; }
+.keys dd { margin: 0; }
+kbd {
+  display: inline-block; min-width: 1.9em; padding: 3px 7px; text-align: center;
+  font-family: inherit; font-size: .8125rem; font-weight: 500; line-height: 1.3; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px;
+}
+
+@media (max-height: 640px) { main { padding-top: 40px; gap: 12px; } footer { min-height: 170px; } }
+@media (prefers-reduced-motion: reduce) { *, *::backdrop { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body data-view="idle" data-mode="work">
+
+<header class="chrome">
+  <button class="icon" id="keysBtn" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8"/></svg></button>
+  <button class="icon" id="histBtn" aria-label="History" title="History (H)"><svg viewBox="0 0 24 24"><path d="M5 20v-8M12 20V5M19 20v-5"/></svg></button>
+  <button class="icon" id="setBtn" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></button>
+</header>
+
+<main>
+  <div class="task">
+    <input id="task" list="recent" placeholder="What are you working on?" autocomplete="off" maxlength="120" aria-label="Task">
+    <datalist id="recent"></datalist>
+    <p id="taskLabel" hidden></p>
+  </div>
+  <div class="dial" id="dial" tabindex="0" role="slider" aria-label="Session length" aria-valuemin="1" aria-valuemax="240">
+    <svg viewBox="0 0 200 200" aria-hidden="true">
+      <g transform="rotate(-90 100 100)">
+        <g id="ticks"></g>
+        <circle id="track" cx="100" cy="100" r="84"/>
+        <circle id="arc" cx="100" cy="100" r="84" pathLength="1000" stroke-dasharray="1000" stroke-dashoffset="1000"/>
+        <circle id="knob" cx="100" cy="16"/>
+      </g>
+    </svg>
+    <div class="face">
+      <div id="time" title="Click to type a length"></div>
+      <input id="timeEdit" type="number" min="1" max="240" inputmode="numeric" aria-label="Minutes" hidden>
+      <div id="sub"></div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div id="idleCtl" class="chrome">
+    <div class="row" style="margin-bottom:14px">
+      <button class="chip" data-m="30">30 min</button>
+      <button class="chip" data-m="45">45 min</button>
+      <button class="chip" data-m="60">60 min</button>
+    </div>
+    <div class="row">
+      <button class="primary" id="startBtn" title="Space">Start</button>
+      <button class="ghost" id="flowBtn" title="F">Count up</button>
+    </div>
+  </div>
+  <div id="runCtl" class="row chrome">
+    <button class="ghost" id="pauseBtn" title="Space">Pause</button>
+    <button class="ghost" id="notesBtn" title="N">Park a thought</button>
+    <button class="ghost" id="skipAhead" title="→"></button>
+    <button class="ghost" id="stopBtn" title="Esc">Stop</button>
+  </div>
+  <div id="review">
+    <p id="away" class="note"></p>
+    <p>How focused were you?</p>
+    <div class="rate"><span class="scale" aria-hidden="true">scattered</span>
+      <button data-r="1">1</button><button data-r="2">2</button><button data-r="3">3</button><button data-r="4">4</button><button data-r="5">5</button><span class="scale" aria-hidden="true">deep</span>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <button class="primary" id="breakBtn" title="B"></button>
+      <button class="ghost" id="skipBtn" title="S">Skip break</button>
+    </div>
+  </div>
+  <p class="note" id="hint">Click anywhere to turn on the alarm sound.</p>
+  <p class="note chrome" id="warn">Notifications are blocked, so alarms are sound-only. <button class="link" id="warnBtn">Fix this in Settings</button></p>
+</footer>
+
+<dialog id="notesDlg" closedby="any" aria-labelledby="notesTitle">
+  <div class="dlg-head"><h2 id="notesTitle">Park a thought</h2><button class="icon" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="dlg-body">
+    <p class="note" style="text-align:left;margin-bottom:10px">Write down whatever is pulling at you, then get back to work. It's saved with this session.</p>
+    <textarea id="noteTxt" aria-label="Thought"></textarea>
+    <div class="row" style="justify-content:flex-start;margin-top:10px">
+      <button class="primary" id="noteSave">Save thought</button>
+      <span class="note">or press Enter</span>
+    </div>
+    <ul id="noteList"></ul>
+  </div>
+</dialog>
+
+<dialog id="histDlg" closedby="any" tabindex="-1" aria-labelledby="histTitle">
+  <div class="dlg-head"><h2 id="histTitle">History</h2><button class="icon" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="dlg-body">
+    <div id="hist"></div>
+    <div class="dlg-foot">
+      <button class="ghost" id="exportBtn">Export history</button>
+      <button class="ghost" id="importBtn">Import history</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+      <p class="note" id="importMsg"></p>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="setDlg" closedby="any" tabindex="-1" aria-labelledby="setTitle">
+  <div class="dlg-head"><h2 id="setTitle">Settings</h2><button class="icon" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="dlg-body">
+    <div class="setting">
+      <label for="snd">Alarm sound</label>
+      <select id="snd"><option value="chime">Chime</option><option value="bell">Bell</option><option value="soft">Soft</option></select>
+    </div>
+    <div class="setting">
+      <label for="vol">Alarm volume</label>
+      <input type="range" id="vol" min="0.05" max="1" step="0.05">
+    </div>
+    <div class="setting">
+      <span>Notifications</span>
+      <span class="state" id="notifState"></span>
+      <button class="ghost help" id="notifBtn" style="justify-self:start">Allow notifications</button>
+      <p class="note help" id="notifHelp">To allow them, click the icon at the left of the address bar, open the site's permissions, set Notifications to Allow, then reload this page.</p>
+    </div>
+    <div class="setting">
+      <label for="theme">Theme</label>
+      <select id="theme"><option value="dark">Dark</option><option value="light">Light</option><option value="system">Match system</option></select>
+    </div>
+    <div class="setting">
+      <span>Check that alarms reach you</span>
+      <button class="ghost" id="testBtn">Test alarm</button>
+      <p class="note help">Plays the sound and sends a notification. If the notification doesn't show, turn off Windows Do Not Disturb or add your browser to its allowed apps.</p>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="keysDlg" closedby="any" tabindex="-1" aria-labelledby="keysTitle">
+  <div class="dlg-head"><h2 id="keysTitle">Keyboard shortcuts</h2><button class="icon" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="dlg-body">
+    <dl class="keys">
+      <dt><kbd>Space</kbd></dt><dd>Start, pause or resume</dd>
+      <dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Add or remove 5 minutes, before or during a session</dd>
+      <dt><kbd>Shift</kbd> + <kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Add or remove 1 minute</dd>
+      <dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></dt><dd>Set 30, 45 or 60 minutes</dd>
+      <dt><kbd>F</kbd></dt><dd>Start counting up</dd>
+      <dt><kbd>N</kbd></dt><dd>Park a thought</dd>
+      <dt><kbd>→</kbd></dt><dd>Skip ahead: log the time so far and move to the break (or end the break)</dd>
+      <dt><kbd>Esc</kbd></dt><dd>Stop: log the time so far and go back to the start screen</dd>
+      <dt><kbd>H</kbd></dt><dd>History</dd>
+    </dl>
+    <h3>After a session</h3>
+    <dl class="keys" style="margin-bottom:0">
+      <dt><kbd>1</kbd> – <kbd>5</kbd></dt><dd>Rate your focus</dd>
+      <dt><kbd>B</kbd></dt><dd>Take the suggested break</dd>
+      <dt><kbd>S</kbd></dt><dd>Skip the break</dd>
+    </dl>
+  </div>
+</dialog>
+
+<script>
+const $ = s => document.querySelector(s), $$ = s => document.querySelectorAll(s);
+const load = (k, d) => { try { return JSON.parse(localStorage.getItem('focus.' + k)) ?? d; } catch { return d; } };
+const save = (k, v) => { try { localStorage.setItem('focus.' + k, JSON.stringify(v)); } catch {} };
+const now = () => Date.now();
+const TAU = Math.PI * 2;
+const clock = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+let set = { mins: 45, vol: .4, sound: 'chime', theme: 'dark', ...load('settings', {}) };
+let log = load('log', []);
+// run: { mode: 'work'|'break', task, start, pausedMs, pausedAt, planned (ms, null = count up), notes }
+// Time is always derived from timestamps, so throttled tabs, sleep and reloads can't make it drift.
+let run = load('run', null);
+let view = 'idle';   // idle | run | ring | review
+let last = null;     // the session that just ended: { mode, task, mins, planned, early, s: log entry, away }
+const elapsed = r => (r.pausedAt ?? now()) - r.start - r.pausedMs;
+
+/* ---------- sound ---------- */
+let ctx, bus, chimeAt = 0, timeout;
+const REPEATS = [0, 60, 180];   // gentle: at the end, after 1 min, after 3 min, then quiet
+function tone(out, t, f, dur, type = 'sine', amp = 1) {
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type; o.frequency.value = f;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(set.vol * .5 * amp, t + .02);
+  g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g).connect(out); o.start(t); o.stop(t + dur);
+}
+function sound(out, t) {
+  if (set.sound === 'bell') [1, 2.76, 5.4].forEach((m, i) => tone(out, t, 523.25 * m, 2.6 - i * .7, 'sine', [1, .4, .2][i]));
+  else if (set.sound === 'soft') { tone(out, t, 392, 1.6, 'triangle'); tone(out, t + .3, 523.25, 1.8, 'triangle'); }
+  else { tone(out, t, 659.25, 1.4); tone(out, t + .18, 987.77, 1.6, 'sine', .8); }
+}
+function newBus(at) {
+  bus?.disconnect();
+  bus = ctx.createGain(); bus.connect(ctx.destination);
+  chimeAt = at;
+  REPEATS.forEach(s => sound(bus, at + s));
+}
+async function unlock() {   // browsers only allow audio after a click or keypress
+  ctx ??= new AudioContext();
+  if (ctx.state !== 'running') { await ctx.resume(); if (view === 'run') arm(); render(); }
+}
+async function preview() { await unlock(); sound(ctx.destination, ctx.currentTime + .05); }
+// The chime is pre-scheduled on the audio clock, which keeps running in background tabs;
+// the setTimeout handles the notification, and tick() catches anything missed during sleep.
+function arm() {
+  disarm();
+  if (!run || run.pausedAt || run.planned == null) return;
+  const ms = run.planned - elapsed(run);
+  timeout = setTimeout(ring, Math.max(0, ms));
+  if (ctx?.state === 'running') newBus(ctx.currentTime + ms / 1000);
+}
+function disarm() { clearTimeout(timeout); bus?.disconnect(); bus = null; }
+
+/* ---------- notifications, favicon ---------- */
+let note;
+function notify(title, body) {
+  try {
+    if (Notification.permission !== 'granted') return;
+    note = new Notification(title, { body, tag: 'focus', requireInteraction: true, icon: 'icon.svg' });
+    note.onclick = () => { focus(); ack(); };
+  } catch {}
+}
+// the tab icon shows how much of the session is left, so a glance at the tab bar is enough
+let favKey;
+function setFav(frac, done) {
+  const key = done ? 'done' : frac == null ? 'idle' : Math.round(frac * 48);
+  if (key === favKey) return;
+  favKey = key;
+  if (key === 'idle') return $('link[rel=icon]').href = 'icon.svg';
+  const c = document.body.dataset.mode === 'break' ? '#93C2A6' : '#F0B45A', w = 'fill="none" stroke-width="6"';
+  let inner = '';
+  if (done) inner = `<circle cx="32" cy="32" r="20" ${w} stroke="${c}"/><circle cx="32" cy="32" r="8" fill="${c}"/>`;
+  else if (frac > .99) inner = `<circle cx="32" cy="32" r="20" ${w} stroke="${c}"/>`;
+  else if (frac > .01) {
+    const a = frac * TAU;
+    inner = `<path d="M32 12A20 20 0 ${frac > .5 ? 1 : 0} 1 ${(32 + 20 * Math.sin(a)).toFixed(2)} ${(32 - 20 * Math.cos(a)).toFixed(2)}" ${w} stroke="${c}" stroke-linecap="round"/>`;
+  }
+  $('link[rel=icon]').href = 'data:image/svg+xml,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0F1722"/><circle cx="32" cy="32" r="20" ${w} stroke="#26344A"/>${inner}</svg>`);
+}
+
+/* ---------- session flow ---------- */
+function start(mode, flow = false, mins = set.mins) {
+  closeEdit(true);
+  run = { mode, task: mode === 'work' ? $('#task').value.trim() : '', start: now(), pausedMs: 0, pausedAt: null, planned: flow ? null : mins * 60000, notes: [] };
+  save('run', run); view = 'run'; last = null;
+  if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().then(render);
+  arm(); unlock(); render();
+}
+function togglePause() {
+  if (run.pausedAt) { run.pausedMs += now() - run.pausedAt; run.pausedAt = null; } else run.pausedAt = now();
+  save('run', run); arm(); render();
+}
+function adjust(d) {
+  if (view === 'idle') return setMins(set.mins + d);
+  if (view !== 'run' || run.planned == null) return;
+  run.planned = Math.max(elapsed(run) + 60000, run.planned + d * 60000);
+  save('run', run); arm(); render();
+}
+function setMins(m, persist = true) {
+  set.mins = Math.min(240, Math.max(1, Math.round(m) || set.mins));
+  if (persist) save('settings', set);
+  render();
+}
+
+// Ends the run and logs work sessions of a minute or more. Leaves the audio alone.
+function end(early) {
+  const r = run, e = r.planned == null || early ? elapsed(r) : r.planned;
+  run = null; save('run', null);
+  last = { mode: r.mode, task: r.task, mins: Math.round(e / 60000), planned: r.planned && r.planned / 60000, early: early && r.planned != null, s: null };
+  if (r.mode === 'work' && e >= 60000) {
+    last.s = { task: r.task, start: r.start, end: r.start + r.pausedMs + e, mins: last.mins, planned: last.planned, early: last.early, rating: null, notes: r.notes };
+    log.push(last.s); save('log', log);
+  }
+}
+function ring() {
+  if (view !== 'run') return;
+  clearTimeout(timeout);
+  // The audio clock pauses while the laptop sleeps; if the chime is still in the future, play it now.
+  if (ctx?.state === 'running' && (!bus || ctx.currentTime < chimeAt - 1)) newBus(ctx.currentTime);
+  const mode = run.mode, task = run.task;
+  end(false);
+  view = 'ring';
+  const title = mode === 'work' ? `Done: ${task || 'focus session'}` : 'Break over';
+  render();
+  document.title = '✓ ' + title; setFav(null, true);
+  notify(title, mode === 'work' ? `${last.mins} minutes logged.` : 'Ready for the next session?');
+}
+const after = () => last.s ? (view = 'review', render()) : toIdle();
+function ack() {
+  if (view !== 'ring') return;
+  disarm(); note?.close(); after();
+}
+function skip() { disarm(); end(true); after(); }   // on to the next block: work goes to review and a break, a break ends
+function stop() { disarm(); end(true); toIdle(); }
+function toIdle() { view = 'idle'; last = null; ctx?.suspend(); render(); }
+function rate(n) { if (last?.s) { last.s.rating = n; save('log', log); render(); } }
+const breakMins = () => Math.min(20, Math.max(3, Math.round(last.mins / 5)));
+
+/* ---------- dial ---------- */
+const dial = $('#dial'), R = 84;
+$('#ticks').innerHTML = [...Array(60)].map((_, i) => {
+  const a = i / 60 * TAU, big = i % 5 === 0, r1 = big ? 90.5 : 92.5, r2 = 95.5, p = (r, f) => (100 + r * f(a)).toFixed(2);
+  return `<line${big ? ' class="major"' : ''} x1="${p(r1, Math.cos)}" y1="${p(r1, Math.sin)}" x2="${p(r2, Math.cos)}" y2="${p(r2, Math.sin)}"/>`;
+}).join('');
+// frac of a 60-minute face (like a kitchen timer), or null to hide the arc
+function drawDial(frac) {
+  const on = frac != null && frac > .001;
+  $('#arc').style.visibility = $('#knob').style.visibility = on ? '' : 'hidden';
+  if (!on) return;
+  const f = Math.min(1, frac), a = f * TAU;
+  $('#arc').style.strokeDashoffset = 1000 * (1 - f);
+  $('#knob').setAttribute('cx', (100 + R * Math.cos(a)).toFixed(2));
+  $('#knob').setAttribute('cy', (100 + R * Math.sin(a)).toFixed(2));
+}
+// drag around the ring to set the length; keep going round for more than an hour
+let drag = null;
+const angleAt = e => {
+  const b = dial.getBoundingClientRect(), a = Math.atan2(e.clientX - b.left - b.width / 2, b.top + b.height / 2 - e.clientY);
+  return a < 0 ? a + TAU : a;
+};
+dial.onpointerdown = e => {
+  if (view !== 'idle' || e.target.closest('#time, #timeEdit') || e.button) return;
+  e.preventDefault();   // no text selection while dragging
+  closeEdit(true);
+  const a = angleAt(e), m = a / TAU * 60;
+  drag = { a, m: m < .5 ? 60 : m };
+  dial.setPointerCapture(e.pointerId); document.body.classList.add('dragging');
+  setMins(drag.m, false);
+};
+dial.onpointermove = e => {
+  if (!drag) return;
+  const a = angleAt(e);
+  let d = a - drag.a;
+  if (d > Math.PI) d -= TAU; else if (d < -Math.PI) d += TAU;
+  drag.a = a; drag.m = Math.min(240, Math.max(1, drag.m + d / TAU * 60));
+  setMins(drag.m, false);
+};
+dial.onpointerup = dial.onpointercancel = () => {
+  if (!drag) return;
+  drag = null; document.body.classList.remove('dragging'); save('settings', set);
+};
+// click the numbers to type a length
+$('#time').onclick = () => {
+  if (view !== 'idle') return;
+  const i = $('#timeEdit');
+  i.value = set.mins; i.hidden = false; $('#time').hidden = true; i.focus(); i.select();
+};
+function closeEdit(apply) {
+  const i = $('#timeEdit');
+  if (i.hidden) return;
+  i.hidden = true; $('#time').hidden = false;
+  if (apply) setMins(+i.value);
+}
+$('#timeEdit').onkeydown = e => {
+  e.stopPropagation();
+  if (e.key === 'Enter') closeEdit(true);
+  if (e.key === 'Escape') closeEdit(false);
+};
+$('#timeEdit').onblur = () => closeEdit(true);
+
+/* ---------- rendering ---------- */
+const fmt = ms => {
+  const s = Math.max(0, ms) / 1000 | 0, h = s / 3600 | 0, m = (s / 60 | 0) % 60, sec = s % 60, p = n => String(n).padStart(2, '0');
+  return (h ? `${h}:${p(m)}` : p(m)) + ':' + p(sec);
+};
+let shown = '';
+function show(txt) {
+  if (txt === shown) return;
+  shown = txt;
+  // fixed-width digit cells so the numbers don't jiggle as they change
+  $('#time').innerHTML = [...txt].map(c => c === ':' ? '<i class="c">:</i>' : `<i>${c}</i>`).join('');
+  $('#time').classList.toggle('long', txt.length > 5);
+}
+const setText = (sel, t) => { if ($(sel).textContent !== t) $(sel).textContent = t; };
+function tick() {
+  if (view !== 'run') return;
+  const e = elapsed(run), left = run.planned == null ? null : run.planned - e;
+  if (left != null && left <= 0) return ring();
+  // countdown rounds up so it reads 00:01 until the very end; count-up loops the face hourly
+  const txt = left == null ? fmt(e) : fmt(left + 999);
+  show(txt);
+  drawDial(left == null ? (e % 3600000) / 3600000 : left / run.planned);   // full at the start, winds down to nothing
+  setFav(left == null ? (e % 3600000) / 3600000 : left / run.planned);
+  setText('#sub', run.pausedAt ? 'Paused'
+    : left == null ? `Started at ${clock(run.start)}`
+    : `${run.mode === 'break' ? 'Break ends' : 'Ends'} at ${clock(now() + left)}`);
+  const title = `${txt} – ${run.task || (run.mode === 'work' ? 'Focus' : 'Break')}`;
+  if (document.title !== title) document.title = title;
+}
+setInterval(tick, 250);
+
+const mq = matchMedia('(prefers-color-scheme: light)');
+function applyTheme() {
+  const t = set.theme === 'system' ? (mq.matches ? 'light' : 'dark') : set.theme;
+  document.documentElement.dataset.theme = t;
+  $('meta[name=theme-color]').content = t === 'light' ? '#E9EDF1' : '#0F1722';
+}
+mq.onchange = applyTheme;
+
+const openDlg = sel => { $(sel).showModal(); $(sel).focus(); };
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
+function render() {
+  const b = document.body;
+  b.dataset.view = view;
+  b.dataset.mode = run?.mode ?? (view === 'ring' ? last.mode : 'work');
+  b.classList.toggle('paused', !!run?.pausedAt);
+  applyTheme();
+
+  $('#idleCtl').hidden = view !== 'idle';
+  $('#runCtl').hidden = view !== 'run';
+  $('#review').hidden = view !== 'review';
+  $('#task').hidden = view !== 'idle';
+  $('#taskLabel').hidden = view === 'idle';
+  $('#hint').hidden = !(view === 'run' && run.planned != null && ctx?.state !== 'running');
+  $('#warn').hidden = !(view === 'idle' && 'Notification' in window && Notification.permission === 'denied');
+  if (view === 'idle') dial.setAttribute('role', 'slider'); else dial.removeAttribute('role');
+  dial.tabIndex = view === 'idle' ? 0 : -1;
+
+  if (view === 'idle') {
+    show(fmt(set.mins * 60000));
+    drawDial(set.mins % 60 / 60 || 1);
+    setText('#sub', 'Drag the ring to set');
+    document.title = 'Focus'; setFav(null);
+    $$('[data-m]').forEach(x => x.setAttribute('aria-pressed', +x.dataset.m === set.mins));
+    dial.setAttribute('aria-valuenow', set.mins);
+    dial.setAttribute('aria-valuetext', `${set.mins} minutes`);
+    const tasks = [...new Set(log.map(s => s.task).filter(Boolean).reverse())].slice(0, 8);
+    $('#recent').innerHTML = tasks.map(t => `<option value="${esc(t)}">`).join('');
+  } else if (view === 'run') {
+    $('#taskLabel').textContent = run.mode === 'work' ? (run.task || 'Focus session') : 'Break';
+    $('#pauseBtn').textContent = run.pausedAt ? 'Resume' : 'Pause';
+    $('#notesBtn').hidden = $('#stopBtn').hidden = run.mode !== 'work';
+    $('#skipAhead').textContent = run.mode === 'work' ? 'Skip to break' : 'Skip break';
+    tick();
+  } else if (view === 'ring') {
+    $('#taskLabel').textContent = last.mode === 'work' ? (last.task || 'Focus session') : 'Break';
+    show('00:00'); drawDial(null);
+    setText('#sub', 'Press any key to continue');
+  } else {
+    const s = last.s;
+    $('#taskLabel').textContent = s.task || 'Focus session';
+    show(String(s.mins)); drawDial(null);
+    setText('#sub', last.early ? `of ${last.planned} minutes` : s.mins === 1 ? 'minute' : 'minutes');
+    $('#away').hidden = !last.away;
+    $('#away').textContent = `Finished at ${clock(s.end)} while the app was closed.`;
+    $$('[data-r]').forEach(x => x.setAttribute('aria-pressed', +x.dataset.r === s.rating));
+    $('#breakBtn').textContent = `Take a ${breakMins()}-minute break`;
+    document.title = 'Focus'; setFav(null);
+  }
+}
+
+/* ---------- history ---------- */
+const hm = m => m >= 60 ? `${m / 60 | 0}h` + (m % 60 ? ` ${m % 60}m` : '') : `${m}m`;
+const dayKey = t => new Date(t).toDateString();
+let histDay = null;
+function buildHistory() {
+  const byDay = {};
+  for (const s of log) byDay[dayKey(s.start)] = (byDay[dayKey(s.start)] || 0) + s.mins;
+  const days = [...Array(7)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() - 6 + i); return { d, k: d.toDateString(), m: byDay[d.toDateString()] || 0 }; });
+  const today = days[6].k, sel = histDay ?? today;
+  const max = Math.max(60, ...days.map(x => x.m));
+  let streak = 0; const d = new Date();
+  if (!byDay[d.toDateString()]) d.setDate(d.getDate() - 1);
+  while (byDay[d.toDateString()]) { streak++; d.setDate(d.getDate() - 1); }
+  const list = log.filter(s => dayKey(s.start) === sel).reverse();
+  const meta = s => [`${s.mins} min${s.early ? ` of ${s.planned}` : ''}`, s.planned == null && 'counted up', s.rating && `focus ${s.rating} of 5`].filter(Boolean).join(', ');
+  $('#hist').innerHTML = `
+    <div class="stats">
+      <div><b>${hm(days[6].m)}</b><span>today</span></div>
+      <div><b>${hm(days.reduce((a, x) => a + x.m, 0))}</b><span>last 7 days</span></div>
+      <div><b>${streak}</b><span>${streak === 1 ? 'day' : 'days'} in a row</span></div>
+    </div>
+    <div class="week">${days.map(x => `<button data-day="${x.k}" aria-pressed="${x.k === sel}" aria-label="${x.d.toLocaleDateString([], { weekday: 'long' })}, ${hm(x.m)}">
+      <span class="v">${x.m ? hm(x.m) : ''}</span><span class="fill" style="--h:${x.m / max}"></span><span>${x.d.toLocaleDateString([], { weekday: 'short' })}</span></button>`).join('')}</div>
+    <h3>${sel === today ? 'Today' : new Date(sel).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}</h3>
+    ${list.length ? `<ul class="sessions">${list.map(s => `<li>
+      <span class="at">${clock(s.start)}</span>
+      <div><div>${esc(s.task) || 'Focus session'}</div><div class="meta">${meta(s)}</div>
+      ${s.notes?.length ? `<ul class="notes">${s.notes.map(n => `<li>${esc(n.text)}</li>`).join('')}</ul>` : ''}</div>
+      <button class="del" data-del="${s.start}" aria-label="Delete session at ${clock(s.start)}">Delete</button></li>`).join('')}</ul>`
+      : `<p class="note" style="text-align:left">${sel === today ? 'No sessions yet today. Close this and press Space to start one.' : 'No sessions on this day.'}</p>`}`;
+}
+$('#hist').onclick = e => {
+  const day = e.target.closest('[data-day]'), del = e.target.closest('[data-del]');
+  if (day) { histDay = day.dataset.day; buildHistory(); }
+  if (del && confirm('Delete this session from your history?')) {
+    const s = log.find(x => x.start === +del.dataset.del);
+    log = log.filter(x => x !== s); save('log', log);
+    if (last?.s === s) toIdle();
+    buildHistory();
+  }
+};
+function openHistory() { histDay = null; buildHistory(); $('#importMsg').textContent = ''; openDlg('#histDlg'); }
+$('#exportBtn').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify({ log, settings: set }, null, 1)], { type: 'application/json' }));
+  a.download = `focus-history-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+};
+$('#importBtn').onclick = () => $('#importFile').click();
+$('#importFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  try {
+    const data = JSON.parse(await f.text());
+    if (!Array.isArray(data.log)) throw 0;
+    const seen = new Set(log.map(s => s.start));
+    const add = data.log.filter(s => Number.isFinite(s?.start) && Number.isFinite(s?.mins) && !seen.has(s.start))
+      .map(s => ({ ...s, task: String(s.task ?? ''), notes: Array.isArray(s.notes) ? s.notes : [] }));
+    log = [...log, ...add].sort((a, b) => a.start - b.start); save('log', log);
+    buildHistory(); $('#importMsg').textContent = `Imported ${add.length} session${add.length === 1 ? '' : 's'}.`;
+  } catch { $('#importMsg').textContent = "That file isn't a Focus history export. Choose a file made with Export history."; }
+};
+
+/* ---------- notes ---------- */
+function openNotes() {
+  $('#noteList').innerHTML = run.notes.map(n => `<li>${esc(n.text)}</li>`).join('');
+  $('#noteTxt').value = ''; openDlg('#notesDlg'); $('#noteTxt').focus();
+}
+function saveNote() {
+  const text = $('#noteTxt').value.trim();
+  if (text && run) { run.notes.push({ t: now(), text }); save('run', run); }
+  $('#notesDlg').close();
+}
+$('#noteSave').onclick = saveNote;
+$('#noteTxt').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveNote(); } };
+
+/* ---------- settings ---------- */
+function syncSettings() {
+  $('#vol').value = set.vol; $('#snd').value = set.sound; $('#theme').value = set.theme;
+  const p = 'Notification' in window ? Notification.permission : 'unsupported';
+  $('#notifState').textContent = { granted: 'Allowed', denied: 'Blocked', default: 'Not set up', unsupported: 'Not available here' }[p];
+  $('#notifState').classList.toggle('good', p === 'granted');
+  $('#notifBtn').hidden = p !== 'default';
+  $('#notifHelp').hidden = p !== 'denied';
+}
+function openSettings() { syncSettings(); openDlg('#setDlg'); }
+const saveSet = () => save('settings', set);
+$('#vol').oninput = e => { set.vol = +e.target.value; saveSet(); };
+$('#vol').onchange = preview;
+$('#snd').onchange = e => { set.sound = e.target.value; saveSet(); preview(); };
+$('#theme').onchange = e => { set.theme = e.target.value; saveSet(); render(); };
+$('#notifBtn').onclick = async () => { await Notification.requestPermission(); syncSettings(); render(); };
+$('#testBtn').onclick = async () => {
+  await preview();
+  if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
+  try { if (Notification.permission === 'granted') new Notification('Test alarm', { body: 'Notifications are working.', icon: 'icon.svg' }); } catch {}
+  syncSettings(); render();
+};
+
+/* ---------- input ---------- */
+$$('[data-m]').forEach(x => x.onclick = () => setMins(+x.dataset.m));
+$$('[data-r]').forEach(x => x.onclick = () => rate(+x.dataset.r));
+$$('[data-close]').forEach(x => x.onclick = () => x.closest('dialog').close());
+$('#startBtn').onclick = () => start('work');
+$('#flowBtn').onclick = () => start('work', true);
+$('#pauseBtn').onclick = togglePause;
+$('#stopBtn').onclick = stop;
+$('#skipAhead').onclick = skip;
+$('#notesBtn').onclick = openNotes;
+$('#breakBtn').onclick = () => start('break', false, breakMins());
+$('#skipBtn').onclick = toIdle;
+$('#histBtn').onclick = openHistory;
+$('#setBtn').onclick = $('#warnBtn').onclick = openSettings;
+$('#keysBtn').onclick = () => openDlg('#keysDlg');
+
+addEventListener('pointerdown', () => { if (view === 'ring') ack(); else if (view === 'run') unlock(); });
+addEventListener('keydown', e => {
+  if (view === 'ring') { e.preventDefault(); return ack(); }
+  if (view === 'run') unlock();
+  if (e.ctrlKey || e.metaKey || e.altKey || $('dialog[open]')) return;
+  if (e.target.matches('input, textarea, select')) {
+    if (e.target.id === 'task' && e.key === 'Enter') start('work');
+    if (e.key === 'Escape') e.target.blur();
+    return;
+  }
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (view === 'review') {
+    if (/^[1-5]$/.test(k)) rate(+k);
+    else if (k === 'b') start('break', false, breakMins());
+    else if (k === 's' || k === 'Escape') toIdle();
+    return;
+  }
+  if (k === ' ') { e.preventDefault(); view === 'idle' ? start('work') : togglePause(); }
+  else if (k === 'ArrowUp' || k === 'ArrowDown' || (view === 'idle' && e.target === dial && (k === 'ArrowRight' || k === 'ArrowLeft'))) {
+    e.preventDefault(); adjust((k === 'ArrowUp' || k === 'ArrowRight' ? 1 : -1) * (e.shiftKey ? 1 : 5));
+  }
+  else if (k === 'h') openHistory();
+  else if (k === '?') openDlg('#keysDlg');
+  else if (view === 'idle' && /^[1-3]$/.test(k)) setMins([30, 45, 60][k - 1]);
+  else if (view === 'idle' && k === 'f') start('work', true);
+  else if (view === 'run' && k === 'n' && run.mode === 'work') { e.preventDefault(); openNotes(); }
+  else if (view === 'run' && k === 'Escape') stop();
+  else if (view === 'run' && k === 'ArrowRight' && e.target !== dial) skip();
+});
+
+// fade the controls away while the mouse is still during a session
+let stillTimer;
+addEventListener('mousemove', () => {
+  document.body.classList.remove('still');
+  clearTimeout(stillTimer);
+  stillTimer = setTimeout(() => document.body.classList.add('still'), 2500);
+});
+
+/* ---------- restore after reload / closed tab ---------- */
+if (run) {
+  if (run.planned != null && elapsed(run) >= run.planned) {
+    const mode = run.mode;
+    end(false);
+    if (mode === 'work' && last.s) { view = 'review'; last.away = true; } else last = null;
+  } else { view = 'run'; arm(); }
+}
+render();
+
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>

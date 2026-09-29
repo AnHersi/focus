@@ -1,0 +1,9 @@
+{
+  "name": "Focus",
+  "short_name": "Focus",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0F1722",
+  "theme_color": "#0F1722",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
