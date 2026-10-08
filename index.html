@@ -168,7 +168,9 @@ input[type="range"] { accent-color: var(--accent); width: 160px; }
 .icon:disabled { opacity: .3; cursor: default; background: none; }
 
 /* year heatmap */
-.heatwrap { overflow-x: auto; padding-bottom: 4px; }
+/* padding so the selected day's outline isn't clipped by the scroll box */
+.heatwrap { overflow-x: auto; padding: 3px; margin: 0 -3px; }
+.sec .chip { padding: 3px 12px; font-size: .8125rem; }
 .months, .heat { display: grid; grid-template-columns: repeat(53, minmax(9px, 1fr)); column-gap: 3px; min-width: 590px; }
 .months { height: 1.4em; color: var(--dim); font-size: .6875rem; overflow: hidden; }
 .months span { white-space: nowrap; }
@@ -190,7 +192,11 @@ input[type="range"] { accent-color: var(--accent); width: 160px; }
 .tasks .bar span { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
 .tasks .amt { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .tasks small { color: var(--dim); font-size: .75rem; }
-.mins { width: 4.2em; padding: 0 4px; font-size: .8125rem; }
+/* edits in place, like the session name: looks like text until hovered */
+.num.mins { width: 2.6em; padding: 0 2px; text-align: left; font-size: inherit; color: var(--ink); background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; appearance: textfield; }
+.num.mins:hover { border-color: var(--dim); }
+.num.mins:focus { outline: none; border-color: var(--accent); }
+.mins::-webkit-inner-spin-button, .mins::-webkit-outer-spin-button { appearance: none; margin: 0; }
 
 .week { display: grid; grid-template-columns: repeat(var(--n, 7), 1fr); gap: 2px; height: 160px; margin-bottom: 20px; }
 .week button {
@@ -199,8 +205,8 @@ input[type="range"] { accent-color: var(--accent); width: 160px; }
 }
 .week button:hover { background: var(--bg); }
 .week button[aria-pressed="true"] { background: var(--bg); color: var(--ink); }
-.week .fill { width: 60%; max-width: 26px; height: calc(var(--h) * 64%); min-height: 2px; border-radius: 4px 4px 0 0; background: var(--accent); opacity: .4; }
-.week [aria-pressed="true"] .fill { opacity: 1; }
+.week .fill { width: 60%; max-width: 26px; height: calc(var(--h) * 64%); min-height: 2px; border-radius: 4px 4px 0 0; background: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.week .met .fill { background: var(--accent); }
 .week .v { font-variant-numeric: tabular-nums; min-height: 1.2em; }
 .week .met .v { color: var(--accent); }
 .sessions { list-style: none; margin: 8px 0 0; padding: 0; }
@@ -862,7 +868,7 @@ function buildHistory() {
     const k = shift(heat0, i), m = byDay[k] || 0;
     if (i % 7 === 0 && i && new Date(k).getMonth() !== prevMonth) {
       prevMonth = new Date(k).getMonth();
-      months += `<span style="grid-column:${i / 7 + 1}">${dateStr(k, { month: 'short' })}</span>`;
+      if (i / 7 < 51) months +=`<span style="grid-column:${i / 7 + 1}">${dateStr(k, { month: 'short' })}</span>`;
     }
     cells += i > back ? '<i class="future"></i>'
       : `<i data-day="${k}" data-l="${lvl(m, k)}"${k === sel ? ' class="sel"' : ''} title="${dateStr(k, { weekday: 'short', day: 'numeric', month: 'short' })}: ${m ? `${hm(m)}, ${plural(count[k], 'session')}` : 'nothing logged'}"></i>`;
@@ -889,7 +895,7 @@ function buildHistory() {
       <div><b>${streak}</b><span>${streak === 1 ? 'day' : 'days'} in a row</span></div>
       <div><b>${best}</b><span>best streak</span></div>
       <div><b>${hm(bestM)}</b><span>${bestM ? `best day, ${dateStr(bestK, { day: 'numeric', month: 'short', year: 'numeric' })}` : 'best day'}</span></div>
-      <div><b>${avg}</b><span>average focus, last 30 days</span></div>
+      <div><b>${avg}</b><span>avg focus, 30 days</span></div>
     </div>
 
     <div class="sec"><h3>The past year</h3><span>${hm(yearMins)}</span></div>
